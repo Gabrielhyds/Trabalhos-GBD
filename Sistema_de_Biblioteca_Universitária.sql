@@ -1,35 +1,56 @@
+-- =========================================================
+-- Passo 1 – Criando o banco de dados
+-- =========================================================
 CREATE DATABASE biblioteca CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE biblioteca;
 
--- Criando as tabelas solicitadas
+-- =========================================================
+-- Passo 2 – Criando tabelas
+-- =========================================================
 
+-- Tabela de autores
+-- Cada autor pode escrever vários livros (1:N)
 CREATE TABLE autores (
     id INT PRIMARY KEY AUTO_INCREMENT,
     nome VARCHAR(255) NOT NULL
 );
 
+-- Tabela de categorias
+-- Cada livro pertence a uma única categoria
+-- O nome da categoria deve ser único
 CREATE TABLE categorias (
     id INT PRIMARY KEY AUTO_INCREMENT,
     nome VARCHAR(100) NOT NULL UNIQUE
 );
 
+-- Tabela de alunos
+-- Cada aluno pode pegar vários livros emprestados
+-- O email deve ser único
 CREATE TABLE alunos (
     id INT PRIMARY KEY AUTO_INCREMENT,
     nome VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE
 );
 
+-- Tabela de livros
+-- Relacionamento 1:N com autores
+-- Relacionamento 1:N com categorias
+-- ON DELETE CASCADE poderia ser usado para excluir livros automaticamente quando o autor ou categoria for excluído,
+-- mas cuidado: pode remover muitos dados sem querer
 CREATE TABLE livros (
     id INT PRIMARY KEY AUTO_INCREMENT,
     titulo VARCHAR(255) NOT NULL,
     ano_publicacao INT,
     autor_id INT,
     categoria_id INT,
-    FOREIGN KEY (autor_id) REFERENCES autores (id),
-    FOREIGN KEY (categoria_id) REFERENCES categorias (id)
+    FOREIGN KEY (autor_id) REFERENCES autores (id) ON DELETE CASCADE,
+    FOREIGN KEY (categoria_id) REFERENCES categorias (id) ON DELETE CASCADE
 );
 
+-- Tabela de empréstimos
+-- Relacionamento N:M entre alunos e livros
+-- Cada empréstimo registra datas de retirada, prevista e devolução
 CREATE TABLE emprestimos (
     id INT PRIMARY KEY AUTO_INCREMENT,
     livro_id INT,
@@ -37,12 +58,24 @@ CREATE TABLE emprestimos (
     data_retirada DATE NOT NULL,
     data_prevista DATE NOT NULL,
     data_devolucao DATE,
-    FOREIGN KEY (livro_id) REFERENCES livros (id),
-    FOREIGN KEY (aluno_id) REFERENCES alunos (id)
+    FOREIGN KEY (livro_id) REFERENCES livros (id) ON DELETE CASCADE,
+    FOREIGN KEY (aluno_id) REFERENCES alunos (id) ON DELETE CASCADE
 );
 
--- Inserindo 10 autores
+-- =========================================================
+-- REFLEXÃO: ON DELETE CASCADE
+-- =========================================================
+-- Meu colega e eu entendemos que o ON DELETE CASCADE pode ser perigoso.
+-- Isso porque, se eu excluir um registro "pai" (por exemplo, um autor),
+-- todos os registros "filhos" relacionados (como os livros desse autor) serão apagados automaticamente.
+-- Ou seja, podemos perder muitos dados sem querer.
+-- Por isso, é importante ter cuidado ou tratar exclusões manualmente em cenários críticos.
 
+-- =========================================================
+-- Passo 3 – Inserindo dados
+-- =========================================================
+
+-- Inserindo 10 autores
 INSERT INTO
     autores (nome)
 VALUES ('Machado de Assis'),
@@ -66,6 +99,7 @@ VALUES ('Romance'),
     ('Mistério');
 
 -- Inserindo 30 livros
+-- Cada livro está associado a um autor e a uma categoria
 INSERT INTO
     livros (
         titulo,
@@ -319,6 +353,7 @@ VALUES (
     );
 
 -- Registrando 20 empréstimos
+-- Cada empréstimo registra data de retirada, prevista e devolução (se já ocorreu)
 INSERT INTO
     emprestimos (
         livro_id,
@@ -468,20 +503,25 @@ VALUES (
         NULL
     );
 
--- Consultando dados
+-- =========================================================
+-- Passo 4 – Consultando dados
+-- =========================================================
 
+-- Listar todos os livros com seus autores e categorias
 SELECT livros.id, livros.titulo, autores.nome AS autor, categorias.nome AS categoria
 FROM
     livros
     JOIN autores ON livros.autor_id = autores.id
     JOIN categorias ON livros.categoria_id = categorias.id;
 
+-- Listar todos os empréstimos com aluno, livro e datas
 SELECT emprestimos.id, alunos.nome AS aluno, livros.titulo AS livro, emprestimos.data_retirada, emprestimos.data_prevista, emprestimos.data_devolucao
 FROM
     emprestimos
     JOIN alunos ON emprestimos.aluno_id = alunos.id
     JOIN livros ON emprestimos.livro_id = livros.id;
 
+-- Listar empréstimos atrasados
 SELECT alunos.nome AS aluno, livros.titulo AS livro, emprestimos.data_retirada, emprestimos.data_prevista, emprestimos.data_devolucao
 FROM
     emprestimos
@@ -495,6 +535,7 @@ WHERE (
         AND CURDATE() > emprestimos.data_prevista
     );
 
+-- Mostrar autores que têm mais de um livro
 SELECT autores.nome AS autor, COUNT(livros.id) AS quantidade_livros
 FROM autores
     JOIN livros ON livros.autor_id = autores.id
@@ -504,8 +545,20 @@ GROUP BY
 HAVING
     COUNT(livros.id) > 1;
 
--- Atualizações e exclusões
+-- =========================================================
+-- REFLEXÃO: JOINs
+-- =========================================================
+-- Meu colega e eu percebemos que precisamos usar JOINs para algumas consultas.
+-- Por exemplo, se quisermos listar os livros com seus autores e categorias,
+-- essas informações estão em tabelas separadas. O JOIN nos permite combinar tudo
+-- em uma única tabela de resultado.
+-- Também é essencial quando lidamos com empréstimos (N:M) entre alunos e livros.
 
+-- =========================================================
+-- Passo 5 – Atualizações e exclusões
+-- =========================================================
+
+-- Adicionar categoria 'Clássico' se ainda não existir
 INSERT INTO
     categorias (nome)
 SELECT 'Clássico'
@@ -517,6 +570,7 @@ WHERE
             nome = 'Clássico'
     );
 
+-- Atualizar categoria de livros de "Romance" para "Clássico"
 UPDATE livros
 SET
     categoria_id = (
@@ -533,15 +587,20 @@ WHERE
             nome = 'Romance'
     );
 
+-- Alterar e-mail de um aluno
 UPDATE alunos SET email = 'ana.souza.novo@email.com' WHERE id = 1;
 
-select * from alunos WHERE nome = 'Ana Souza';
+-- Verificar alteração
+SELECT * FROM alunos WHERE nome = 'Ana Souza';
 
+-- Excluir um autor (pode falhar se houver livros associados, devido à integridade referencial)
 DELETE FROM autores WHERE nome = 'Machado de Assis';
--- Retorna um erro, pois existem livros como 'Dom Casmurro' e 'Memórias Póstumas de Brás Cubas' na tabela livros que têm o autor_id de Machado de Assis.
 
--- Desafio extra VIEW
+-- =========================================================
+-- Passo 6 – Desafio extra: VIEW
+-- =========================================================
 
+-- Criar uma VIEW que mostra título do livro, aluno, data prevista e status do empréstimo
 CREATE OR REPLACE VIEW vw_loans AS
 SELECT
     livros.titulo AS titulo_livro,
@@ -558,8 +617,10 @@ FROM
     JOIN livros ON emprestimos.livro_id = livros.id
     JOIN alunos ON emprestimos.aluno_id = alunos.id;
 
+-- Visualizar a VIEW
 SELECT * FROM vw_loans;
 
+-- Mostrar quantidade de livros emprestados por categoria
 SELECT
     categorias.nome AS categoria,
     COUNT(emprestimos.id) AS quantidade_emprestimos
